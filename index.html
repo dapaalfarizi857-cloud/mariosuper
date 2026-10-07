@@ -1,0 +1,917 @@
+```html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Super Mario 2D - Fixed & Enhanced</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        body {
+            touch-action: manipulation;
+            user-select: none;
+            -webkit-user-select: none;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #0f172a;
+        }
+        canvas {
+            image-rendering: pixelated;
+            image-rendering: crisp-edges;
+        }
+        .btn-game {
+            box-shadow: 0 4px 0 #1e293b;
+            transition: all 0.1s ease;
+        }
+        .btn-game:active {
+            transform: translateY(2px);
+            box-shadow: 0 2px 0 #1e293b;
+        }
+        .touch-btn {
+            background: rgba(255, 255, 255, 0.25);
+            border: 2px solid rgba(255, 255, 255, 0.4);
+            backdrop-filter: blur(4px);
+            touch-action: none;
+        }
+        .touch-btn:active, .touch-btn.active {
+            background: rgba(255, 255, 255, 0.5);
+        }
+    </style>
+</head>
+<body class="bg-slate-900 text-white min-h-screen flex flex-col justify-between overflow-hidden">
+
+    <!-- Top HUD / Bar -->
+    <header class="w-full bg-slate-800/90 border-b border-slate-700 px-4 py-2 flex justify-between items-center z-10 shadow-md">
+        <div class="flex items-center space-x-4">
+            <span class="font-bold text-red-500 text-xl tracking-wider">MARIO <span class="text-xs bg-red-600 text-white px-2 py-0.5 rounded-full">2D</span></span>
+            <div id="hud-stats" class="hidden md:flex space-x-4 text-sm font-semibold">
+                <span class="text-amber-400"><i class="fa-solid fa-coins mr-1"></i><span id="hud-coins">00</span></span>
+                <span class="text-emerald-400"><i class="fa-solid fa-heart mr-1"></i><span id="hud-lives">x 3</span></span>
+                <span class="text-sky-400"><i class="fa-solid fa-trophy mr-1"></i><span id="hud-score">000000</span></span>
+            </div>
+        </div>
+        <div class="flex items-center space-x-2">
+            <button id="btn-sound" class="bg-slate-700 hover:bg-slate-600 px-3 py-1.5 rounded-lg text-sm font-semibold flex items-center transition">
+                <i class="fa-solid fa-volume-high mr-1.5" id="sound-icon"></i> Sound: ON
+            </button>
+            <button id="btn-level-select" class="bg-indigo-600 hover:bg-indigo-500 px-3 py-1.5 rounded-lg text-sm font-semibold transition">
+                Levels
+            </button>
+        </div>
+    </header>
+
+    <!-- Main Game Display Area -->
+    <main class="relative flex-1 flex items-center justify-center p-2 w-full max-w-6xl mx-auto overflow-hidden">
+        
+        <!-- Game Canvas Container -->
+        <div id="canvas-container" class="relative w-full aspect-[16/9] max-h-[80vh] bg-slate-950 rounded-xl overflow-hidden shadow-2xl border border-slate-800 flex items-center justify-center">
+            <canvas id="gameCanvas" class="w-full h-full object-contain"></canvas>
+
+            <!-- Error Banner (Hidden by default, prevents silent blue screens) -->
+            <div id="error-overlay" class="hidden absolute inset-0 bg-red-950/90 backdrop-blur-md p-6 flex flex-col items-center justify-center text-center z-50">
+                <i class="fa-solid fa-triangle-exclamation text-red-400 text-5xl mb-4 animate-bounce"></i>
+                <h3 class="text-2xl font-bold text-white mb-2">Game Loop Recovered</h3>
+                <p id="error-message" class="text-red-200 text-sm max-w-md mb-4 bg-red-900/50 p-3 rounded-lg border border-red-700 font-mono"></p>
+                <button onclick="restartCurrentLevel()" class="bg-red-600 hover:bg-red-500 text-white font-bold px-6 py-2 rounded-lg transition shadow-lg">
+                    <i class="fa-solid fa-rotate-right mr-2"></i> Reload Level
+                </button>
+            </div>
+
+            <!-- Start / Menu Overlay -->
+            <div id="menu-overlay" class="absolute inset-0 bg-slate-950/80 backdrop-blur-sm flex flex-col items-center justify-center p-4 z-40">
+                <h1 class="text-4xl md:text-6xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-red-500 via-amber-400 to-emerald-400 mb-2 text-center drop-shadow">
+                    SUPER MARIO 2D
+                </h1>
+                <p class="text-slate-400 text-sm md:text-base mb-6 text-center">30 Epic Levels • Boss Battles • Smooth Controls</p>
+
+                <div id="main-menu-actions" class="flex flex-col sm:flex-row gap-4 w-full max-w-xs sm:max-w-md">
+                    <button id="btn-start-game" class="btn-game flex-1 bg-emerald-600 hover:bg-emerald-500 py-3 rounded-xl font-bold text-lg text-white shadow-lg flex items-center justify-center">
+                        <i class="fa-solid fa-play mr-2"></i> Play Now
+                    </button>
+                    <button id="btn-open-levels" class="btn-game flex-1 bg-indigo-600 hover:bg-indigo-500 py-3 rounded-xl font-bold text-lg text-white shadow-lg flex items-center justify-center">
+                        <i class="fa-solid fa-map mr-2"></i> Level Select
+                    </button>
+                </div>
+            </div>
+
+            <!-- Level Select Modal -->
+            <div id="level-modal" class="hidden absolute inset-0 bg-slate-950/95 backdrop-blur-md p-4 sm:p-6 flex flex-col z-50">
+                <div class="flex justify-between items-center mb-4 pb-2 border-b border-slate-800">
+                    <h2 class="text-2xl font-bold text-amber-400 flex items-center"><i class="fa-solid fa-layer-group mr-2"></i> Select World / Level</h2>
+                    <button id="btn-close-modal" class="text-slate-400 hover:text-white text-2xl font-bold px-2">&times;</button>
+                </div>
+                <div id="level-grid" class="flex-1 grid grid-cols-5 sm:grid-cols-6 md:grid-cols-10 gap-2 overflow-y-auto p-2">
+                    <!-- Dynamic Levels Populated Here -->
+                </div>
+            </div>
+
+            <!-- In-Game HUD overlay for Mobile -->
+            <div id="mobile-hud" class="absolute top-2 left-2 right-2 flex justify-between items-center pointer-events-none md:hidden text-xs font-bold text-white shadow-sm bg-black/40 px-3 py-1.5 rounded-lg border border-white/10">
+                <span id="m-hud-level" class="text-amber-300">LVL 1</span>
+                <span id="m-hud-coins" class="text-yellow-400"><i class="fa-solid fa-coins"></i> 0</span>
+                <span id="m-hud-lives" class="text-red-400"><i class="fa-solid fa-heart"></i> 3</span>
+            </div>
+        </div>
+    </main>
+
+    <!-- Mobile Virtual Controls -->
+    <footer class="w-full bg-slate-950/80 border-t border-slate-800/80 p-2 md:hidden">
+        <div class="max-w-md mx-auto flex justify-between items-center">
+            <!-- D-Pad -->
+            <div class="flex gap-2">
+                <button id="btn-left" class="touch-btn w-14 h-14 rounded-2xl flex items-center justify-center text-2xl text-white active:scale-95">
+                    <i class="fa-solid fa-arrow-left"></i>
+                </button>
+                <button id="btn-right" class="touch-btn w-14 h-14 rounded-2xl flex items-center justify-center text-2xl text-white active:scale-95">
+                    <i class="fa-solid fa-arrow-right"></i>
+                </button>
+            </div>
+
+            <!-- Action Buttons -->
+            <div class="flex gap-3">
+                <button id="btn-fire" class="touch-btn w-12 h-12 rounded-full flex items-center justify-center text-lg text-amber-400 font-bold active:scale-95">
+                    <i class="fa-solid fa-fire-flame-curved"></i>
+                </button>
+                <button id="btn-jump" class="touch-btn w-16 h-16 rounded-full flex items-center justify-center text-2xl text-emerald-400 font-bold active:scale-95">
+                    <i class="fa-solid fa-arrow-up"></i>
+                </button>
+            </div>
+        </div>
+    </footer>
+
+    <!-- Game Logic Scripting -->
+    <script>
+        // Web Audio Synthesizer for SFX without external asset failures
+        class SoundEngine {
+            constructor() {
+                this.ctx = null;
+                this.enabled = true;
+            }
+
+            init() {
+                if (!this.ctx) {
+                    const AudioContext = window.AudioContext || window.webkitAudioContext;
+                    if (AudioContext) {
+                        this.ctx = new AudioContext();
+                    }
+                }
+                if (this.ctx && this.ctx.state === 'suspended') {
+                    this.ctx.resume();
+                }
+            }
+
+            playTone(freq, type, duration, vol = 0.1) {
+                if (!this.enabled) return;
+                try {
+                    this.init();
+                    if (!this.ctx) return;
+                    const osc = this.ctx.createOscillator();
+                    const gain = this.ctx.createGain();
+                    osc.type = type;
+                    osc.frequency.setValueAtTime(freq, this.ctx.currentTime);
+                    gain.gain.setValueAtTime(vol, this.ctx.currentTime);
+                    gain.gain.exponentialRampToValueAtTime(0.00001, this.ctx.currentTime + duration);
+                    osc.connect(gain);
+                    gain.connect(this.ctx.destination);
+                    osc.start();
+                    osc.stop(this.ctx.currentTime + duration);
+                } catch (e) {
+                    // Audio context error ignore gracefully
+                }
+            }
+
+            jump() { this.playTone(450, 'sine', 0.15, 0.15); }
+            coin() {
+                this.playTone(987.77, 'sine', 0.08, 0.15);
+                setTimeout(() => this.playTone(1318.51, 'sine', 0.15, 0.15), 80);
+            }
+            stomp() { this.playTone(150, 'square', 0.1, 0.2); }
+            powerup() { this.playTone(600, 'triangle', 0.3, 0.2); }
+            fireball() { this.playTone(300, 'triangle', 0.08, 0.1); }
+            bossHit() { this.playTone(100, 'sawtooth', 0.25, 0.3); }
+            die() { this.playTone(120, 'sawtooth', 0.4, 0.25); }
+        }
+
+        const sound = new SoundEngine();
+
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+
+        // Internal Render Resolution
+        const CANVAS_WIDTH = 800;
+        const CANVAS_HEIGHT = 450;
+        canvas.width = CANVAS_WIDTH;
+        canvas.height = CANVAS_HEIGHT;
+
+        const TILE_SIZE = 32;
+        const GRAVITY = 0.45;
+
+        // Global State Variable
+        let currentLevelIndex = 0;
+        let score = 0;
+        let coins = 0;
+        let lives = 3;
+        let gameState = 'MENU'; // MENU, PLAYING, GAMEOVER, WIN
+        let cameraX = 0;
+
+        // Key states
+        const keys = { left: false, right: false, jump: false, fire: false, jumpPressed: false };
+
+        class Player {
+            constructor() {
+                this.reset(50, 100);
+            }
+
+            reset(x, y) {
+                this.x = x;
+                this.y = y;
+                this.vx = 0;
+                this.vy = 0;
+                this.width = 24;
+                this.height = 30;
+                this.grounded = false;
+                this.facing = 'right';
+                this.coyoteTime = 0;
+                this.jumpBuffer = 0;
+                this.hasFire = false;
+                this.invulnerable = 0;
+            }
+
+            update(level) {
+                // Horizontal Physics
+                const accel = 0.6;
+                const maxSpeed = 4.5;
+                const friction = 0.82;
+
+                if (keys.left) {
+                    this.vx -= accel;
+                    this.facing = 'left';
+                }
+                if (keys.right) {
+                    this.vx += accel;
+                    this.facing = 'right';
+                }
+
+                if (!keys.left && !keys.right) {
+                    this.vx *= friction;
+                }
+
+                this.vx = Math.max(-maxSpeed, Math.min(maxSpeed, this.vx));
+
+                // Coyote time and Jump Buffering
+                if (this.grounded) {
+                    this.coyoteTime = 6;
+                } else if (this.coyoteTime > 0) {
+                    this.coyoteTime--;
+                }
+
+                if (keys.jumpPressed) {
+                    this.jumpBuffer = 6;
+                    keys.jumpPressed = false;
+                } else if (this.jumpBuffer > 0) {
+                    this.jumpBuffer--;
+                }
+
+                // Jump logic
+                if (this.jumpBuffer > 0 && this.coyoteTime > 0) {
+                    this.vy = -10.2; // Snappy jump
+                    this.grounded = false;
+                    this.coyoteTime = 0;
+                    this.jumpBuffer = 0;
+                    sound.jump();
+                }
+
+                // Variable height jump
+                if (!keys.jump && this.vy < -3) {
+                    this.vy *= 0.5;
+                }
+
+                // Gravity
+                this.vy += GRAVITY;
+                if (this.vy > 12) this.vy = 12;
+
+                // Move & Collision
+                this.x += this.vx;
+                this.checkCollisionsX(level);
+
+                this.y += this.vy;
+                this.grounded = false;
+                this.checkCollisionsY(level);
+
+                if (this.invulnerable > 0) this.invulnerable--;
+
+                // Fall off bottom
+                if (this.y > CANVAS_HEIGHT + 100) {
+                    this.takeDamage(true);
+                }
+            }
+
+            checkCollisionsX(level) {
+                const tiles = level.getTilesAround(this.x, this.y, this.width, this.height);
+                for (let t of tiles) {
+                    if (t.solid && this.collidesWith(t)) {
+                        if (this.vx > 0) this.x = t.x - this.width;
+                        else if (this.vx < 0) this.x = t.x + t.w;
+                        this.vx = 0;
+                    }
+                }
+            }
+
+            checkCollisionsY(level) {
+                const tiles = level.getTilesAround(this.x, this.y, this.width, this.height);
+                for (let t of tiles) {
+                    if (t.solid && this.collidesWith(t)) {
+                        if (this.vy > 0) {
+                            this.y = t.y - this.height;
+                            this.grounded = true;
+                            this.vy = 0;
+                        } else if (this.vy < 0) {
+                            this.y = t.y + t.h;
+                            this.vy = 0;
+                            if (t.type === 'question') {
+                                level.hitQuestionBlock(t);
+                            }
+                        }
+                    }
+                }
+            }
+
+            collidesWith(rect) {
+                return this.x < rect.x + rect.w &&
+                       this.x + this.width > rect.x &&
+                       this.y < rect.y + rect.h &&
+                       this.y + this.height > rect.y;
+            }
+
+            takeDamage(instantKill = false) {
+                if (this.invulnerable > 0 && !instantKill) return;
+
+                if (this.hasFire && !instantKill) {
+                    this.hasFire = false;
+                    this.invulnerable = 60;
+                    sound.stomp();
+                } else {
+                    sound.die();
+                    lives--;
+                    updateHUD();
+                    if (lives <= 0) {
+                        gameState = 'GAMEOVER';
+                    } else {
+                        restartCurrentLevel();
+                    }
+                }
+            }
+
+            draw(ctx) {
+                if (this.invulnerable % 4 >= 2) return; // Flash effect
+
+                ctx.save();
+                ctx.translate(Math.round(this.x - cameraX), Math.round(this.y));
+
+                // Mario Body Color
+                ctx.fillStyle = this.hasFire ? '#f87171' : '#ef4444'; // Red shirt
+                ctx.fillRect(4, 8, 16, 14);
+
+                // Overalls
+                ctx.fillStyle = this.hasFire ? '#ffffff' : '#2563eb';
+                ctx.fillRect(6, 18, 12, 10);
+
+                // Head
+                ctx.fillStyle = '#fde047'; // Skin tone
+                ctx.fillRect(4, 2, 16, 10);
+
+                // Cap
+                ctx.fillStyle = this.hasFire ? '#ffffff' : '#dc2626';
+                ctx.fillRect(2, 0, 18, 4);
+
+                // Eyes / Direction
+                ctx.fillStyle = '#000000';
+                if (this.facing === 'right') {
+                    ctx.fillRect(14, 4, 3, 3);
+                } else {
+                    ctx.fillRect(5, 4, 3, 3);
+                }
+
+                ctx.restore();
+            }
+        }
+
+        class Fireball {
+            constructor(x, y, facing) {
+                this.x = x;
+                this.y = y;
+                this.vx = facing === 'right' ? 7 : -7;
+                this.vy = 2;
+                this.radius = 5;
+                this.active = true;
+            }
+
+            update(level) {
+                this.x += this.vx;
+                this.y += this.vy;
+                this.vy += 0.3; // Light gravity bounce
+
+                // Check collision with tiles
+                const tileX = Math.floor(this.x / TILE_SIZE);
+                const tileY = Math.floor(this.y / TILE_SIZE);
+                const tile = level.getTile(tileX, tileY);
+
+                if (tile && tile.solid) {
+                    this.vy = -4; // Bounce up
+                }
+
+                if (this.y > CANVAS_HEIGHT || this.x < cameraX - 50 || this.x > cameraX + CANVAS_WIDTH + 50) {
+                    this.active = false;
+                }
+            }
+
+            draw(ctx) {
+                ctx.fillStyle = '#f97316';
+                ctx.beginPath();
+                ctx.arc(this.x - cameraX, this.y, this.radius, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+
+        class Enemy {
+            constructor(x, y, type = 'goomba') {
+                this.x = x;
+                this.y = y;
+                this.type = type; // goomba, koopa, boss
+                this.width = type === 'boss' ? 48 : 28;
+                this.height = type === 'boss' ? 48 : 28;
+                this.vx = type === 'boss' ? -1.5 : -1;
+                this.vy = 0;
+                this.active = true;
+                this.hp = type === 'boss' ? 5 : 1;
+                this.grounded = false;
+            }
+
+            update(level) {
+                if (!this.active) return;
+
+                this.vy += GRAVITY;
+                this.x += this.vx;
+
+                // Simple wall collision reversal
+                const tX = Math.floor((this.vx > 0 ? this.x + this.width : this.x) / TILE_SIZE);
+                const tY = Math.floor((this.y + this.height / 2) / TILE_SIZE);
+                const tile = level.getTile(tX, tY);
+                if (tile && tile.solid) {
+                    this.vx *= -1;
+                }
+
+                this.y += this.vy;
+                // Floor collision
+                const bX1 = Math.floor(this.x / TILE_SIZE);
+                const bX2 = Math.floor((this.x + this.width) / TILE_SIZE);
+                const bY = Math.floor((this.y + this.height) / TILE_SIZE);
+
+                const tileBelow1 = level.getTile(bX1, bY);
+                const tileBelow2 = level.getTile(bX2, bY);
+
+                if ((tileBelow1 && tileBelow1.solid) || (tileBelow2 && tileBelow2.solid)) {
+                    this.y = bY * TILE_SIZE - this.height;
+                    this.vy = 0;
+                    this.grounded = true;
+                }
+
+                if (this.y > CANVAS_HEIGHT + 100) this.active = false;
+            }
+
+            draw(ctx) {
+                if (!this.active) return;
+                const renderX = this.x - cameraX;
+                
+                if (this.type === 'goomba') {
+                    ctx.fillStyle = '#b45309'; // Brown
+                    ctx.fillRect(renderX, this.y, this.width, this.height);
+                    ctx.fillStyle = '#ffffff'; // Eyes
+                    ctx.fillRect(renderX + 4, this.y + 6, 6, 6);
+                    ctx.fillRect(renderX + 18, this.y + 6, 6, 6);
+                } else if (this.type === 'koopa') {
+                    ctx.fillStyle = '#10b981'; // Green shell
+                    ctx.fillRect(renderX, this.y, this.width, this.height);
+                    ctx.fillStyle = '#fde047'; // Yellow head
+                    ctx.fillRect(renderX + 4, this.y - 6, 12, 10);
+                } else if (this.type === 'boss') {
+                    ctx.fillStyle = '#dc2626'; // Red Boss Bowser style
+                    ctx.fillRect(renderX, this.y, this.width, this.height);
+                    ctx.fillStyle = '#f59e0b'; // Spikes
+                    ctx.fillRect(renderX - 6, this.y + 8, 6, 12);
+                    // Health bar above boss
+                    ctx.fillStyle = '#000000';
+                    ctx.fillRect(renderX, this.y - 12, this.width, 6);
+                    ctx.fillStyle = '#22c55e';
+                    ctx.fillRect(renderX, this.y - 12, (this.width) * (this.hp / 5), 6);
+                }
+            }
+        }
+
+        class Level {
+            constructor(index) {
+                this.index = index;
+                this.width = 100 + index * 10; // Expands with levels
+                this.height = 14;
+                this.grid = [];
+                this.coins = [];
+                this.enemies = [];
+                this.flagX = (this.width - 5) * TILE_SIZE;
+                this.generateLevel(index);
+            }
+
+            generateLevel(idx) {
+                // Initialize empty grid safely
+                this.grid = Array(this.height).fill(null).map(() => Array(this.width).fill(0));
+
+                const isBossLevel = (idx + 1) % 10 === 0;
+
+                // Base floor generation with gaps
+                for (let x = 0; x < this.width; x++) {
+                    const isPit = !isBossLevel && x > 15 && x < this.width - 10 && (x % 17 === 0 || x % 18 === 0);
+                    if (!isPit) {
+                        this.grid[12][x] = 1; // Solid Ground
+                        this.grid[13][x] = 1;
+                    }
+
+                    // Random platforms / Blocks
+                    if (x > 10 && x < this.width - 10 && x % 7 === 0) {
+                        this.grid[8][x] = 2; // Question block
+                        this.grid[8][x - 1] = 1; // Brick
+                        this.grid[8][x + 1] = 1; // Brick
+                    }
+                }
+
+                // Collectibles and Enemies
+                for (let x = 12; x < this.width - 15; x += 6) {
+                    if (Math.random() > 0.4) {
+                        this.coins.push({ x: x * TILE_SIZE + 8, y: 7 * TILE_SIZE, collected: false });
+                    }
+                    if (Math.random() > 0.5) {
+                        const type = (idx > 5 && Math.random() > 0.5) ? 'koopa' : 'goomba';
+                        this.enemies.push(new Enemy(x * TILE_SIZE, 11 * TILE_SIZE, type));
+                    }
+                }
+
+                // Add Boss if Level 10, 20, 30
+                if (isBossLevel) {
+                    const bossX = (this.width - 15) * TILE_SIZE;
+                    this.enemies.push(new Enemy(bossX, 10 * TILE_SIZE, 'boss'));
+                }
+            }
+
+            getTile(x, y) {
+                if (x < 0 || x >= this.width || y < 0 || y >= this.height) return null;
+                const type = this.grid[y] ? this.grid[y][x] : 0;
+                return {
+                    x: x * TILE_SIZE,
+                    y: y * TILE_SIZE,
+                    w: TILE_SIZE,
+                    h: TILE_SIZE,
+                    type: type,
+                    solid: type === 1 || type === 2 || type === 3
+                };
+            }
+
+            getTilesAround(px, py, pw, ph) {
+                const startX = Math.floor((px - TILE_SIZE) / TILE_SIZE);
+                const endX = Math.ceil((px + pw + TILE_SIZE) / TILE_SIZE);
+                const startY = Math.floor((py - TILE_SIZE) / TILE_SIZE);
+                const endY = Math.ceil((py + ph + TILE_SIZE) / TILE_SIZE);
+
+                const tiles = [];
+                for (let y = startY; y <= endY; y++) {
+                    for (let x = startX; x <= endX; x++) {
+                        const t = this.getTile(x, y);
+                        if (t && t.solid) tiles.push(t);
+                    }
+                }
+                return tiles;
+            }
+
+            hitQuestionBlock(tile) {
+                const tx = Math.floor(tile.x / TILE_SIZE);
+                const ty = Math.floor(tile.y / TILE_SIZE);
+                if (this.grid[ty] && this.grid[ty][tx] === 2) {
+                    this.grid[ty][tx] = 3; // Empty used block
+                    coins++;
+                    score += 100;
+                    player.hasFire = true; // Give Fireflower powerup
+                    sound.powerup();
+                    updateHUD();
+                }
+            }
+
+            draw(ctx) {
+                // Determine visible tile bounds to render safely
+                const minTileX = Math.max(0, Math.floor(cameraX / TILE_SIZE));
+                const maxTileX = Math.min(this.width, Math.ceil((cameraX + CANVAS_WIDTH) / TILE_SIZE));
+
+                for (let y = 0; y < this.height; y++) {
+                    for (let x = minTileX; x < maxTileX; x++) {
+                        const type = this.grid[y][x];
+                        if (type === 0) continue;
+
+                        const rx = x * TILE_SIZE - cameraX;
+                        const ry = y * TILE_SIZE;
+
+                        if (type === 1) { // Ground / Brick
+                            ctx.fillStyle = '#1e3a8a';
+                            ctx.fillRect(rx, ry, TILE_SIZE, TILE_SIZE);
+                            ctx.strokeStyle = '#3b82f6';
+                            ctx.strokeRect(rx, ry, TILE_SIZE, TILE_SIZE);
+                        } else if (type === 2) { // Question Block
+                            ctx.fillStyle = '#eab308';
+                            ctx.fillRect(rx, ry, TILE_SIZE, TILE_SIZE);
+                            ctx.fillStyle = '#000000';
+                            ctx.font = 'bold 16px sans-serif';
+                            ctx.fillText('?', rx + 10, ry + 22);
+                        } else if (type === 3) { // Empty Block
+                            ctx.fillStyle = '#64748b';
+                            ctx.fillRect(rx, ry, TILE_SIZE, TILE_SIZE);
+                        }
+                    }
+                }
+
+                // Draw Coins
+                ctx.fillStyle = '#facc15';
+                for (let c of this.coins) {
+                    if (!c.collected && c.x >= cameraX - 20 && c.x <= cameraX + CANVAS_WIDTH + 20) {
+                        ctx.beginPath();
+                        ctx.arc(c.x - cameraX, c.y, 8, 0, Math.PI * 2);
+                        ctx.fill();
+                    }
+                }
+
+                // Draw End Level Flag
+                const flagRenderX = this.flagX - cameraX;
+                ctx.fillStyle = '#e11d48'; // Flag pole
+                ctx.fillRect(flagRenderX, 4 * TILE_SIZE, 6, 8 * TILE_SIZE);
+                ctx.fillStyle = '#22c55e'; // Green banner
+                ctx.beginPath();
+                ctx.moveTo(flagRenderX + 6, 4 * TILE_SIZE);
+                ctx.lineTo(flagRenderX + 36, 5 * TILE_SIZE);
+                ctx.lineTo(flagRenderX + 6, 6 * TILE_SIZE);
+                ctx.fill();
+            }
+        }
+
+        const player = new Player();
+        let currentLevel = new Level(0);
+        let fireballs = [];
+
+        function updateHUD() {
+            document.getElementById('hud-coins').innerText = String(coins).padStart(2, '0');
+            document.getElementById('m-hud-coins').innerHTML = `<i class="fa-solid fa-coins"></i> ${coins}`;
+            document.getElementById('hud-lives').innerText = `x ${lives}`;
+            document.getElementById('m-hud-lives').innerHTML = `<i class="fa-solid fa-heart"></i> ${lives}`;
+            document.getElementById('hud-score').innerText = String(score).padStart(6, '0');
+            document.getElementById('m-hud-level').innerText = `LVL ${currentLevelIndex + 1}`;
+        }
+
+        function loadLevel(index) {
+            try {
+                currentLevelIndex = Math.max(0, Math.min(29, index));
+                currentLevel = new Level(currentLevelIndex);
+                player.reset(50, 100);
+                fireballs = [];
+                cameraX = 0;
+                updateHUD();
+                document.getElementById('error-overlay').classList.add('hidden');
+            } catch (err) {
+                showErrorOverlay("Failed loading level: " + err.message);
+            }
+        }
+
+        function restartCurrentLevel() {
+            loadLevel(currentLevelIndex);
+        }
+
+        function showErrorOverlay(msg) {
+            const errOverlay = document.getElementById('error-overlay');
+            const errText = document.getElementById('error-message');
+            errText.innerText = msg;
+            errOverlay.classList.remove('hidden');
+        }
+
+        function drawSkyGradient() {
+            // World themes based on level
+            const worldTheme = currentLevelIndex % 3;
+            const grad = ctx.createLinearGradient(0, 0, 0, CANVAS_HEIGHT);
+            
+            if (worldTheme === 0) {
+                // Daylight Blue Sky
+                grad.addColorStop(0, '#38bdf8');
+                grad.addColorStop(1, '#bae6fd');
+            } else if (worldTheme === 1) {
+                // Sunset / Desert Sky
+                grad.addColorStop(0, '#f97316');
+                grad.addColorStop(1, '#fde047');
+            } else {
+                // Castle / Underground Sky
+                grad.addColorStop(0, '#0f172a');
+                grad.addColorStop(1, '#1e1b4b');
+            }
+            
+            ctx.fillStyle = grad;
+            ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+        }
+
+        function gameLoop() {
+            try {
+                if (gameState === 'PLAYING') {
+                    // 1. Update Game Logic
+                    player.update(currentLevel);
+
+                    // Camera follow player smoothly
+                    const targetCamX = player.x - CANVAS_WIDTH / 3;
+                    cameraX += (targetCamX - cameraX) * 0.1;
+                    cameraX = Math.max(0, Math.min(cameraX, (currentLevel.width * TILE_SIZE) - CANVAS_WIDTH));
+
+                    // Fireballs
+                    for (let i = fireballs.length - 1; i >= 0; i--) {
+                        const fb = fireballs[i];
+                        fb.update(currentLevel);
+                        if (!fb.active) fireballs.splice(i, 1);
+                    }
+
+                    // Enemies Update & Collision
+                    for (let enemy of currentLevel.enemies) {
+                        if (!enemy.active) continue;
+                        enemy.update(currentLevel);
+
+                        // Player hit enemy
+                        if (player.collidesWith(enemy)) {
+                            // Stomp enemy
+                            if (player.vy > 0 && player.y + player.height - player.vy <= enemy.y + 12) {
+                                sound.stomp();
+                                player.vy = -7; // Jump off enemy
+                                enemy.hp--;
+                                if (enemy.hp <= 0) {
+                                    enemy.active = false;
+                                    score += 200;
+                                }
+                            } else {
+                                player.takeDamage();
+                            }
+                        }
+
+                        // Fireball hit enemy
+                        for (let fb of fireballs) {
+                            if (fb.active && fb.x > enemy.x && fb.x < enemy.x + enemy.width &&
+                                fb.y > enemy.y && fb.y < enemy.y + enemy.height) {
+                                fb.active = false;
+                                enemy.hp--;
+                                sound.bossHit();
+                                if (enemy.hp <= 0) {
+                                    enemy.active = false;
+                                    score += 300;
+                                }
+                            }
+                        }
+                    }
+
+                    // Collect Coins
+                    for (let c of currentLevel.coins) {
+                        if (!c.collected && Math.hypot(player.x + 12 - c.x, player.y + 15 - c.y) < 20) {
+                            c.collected = true;
+                            coins++;
+                            score += 50;
+                            sound.coin();
+                            updateHUD();
+                        }
+                    }
+
+                    // Check Flag / Win Level
+                    if (player.x >= currentLevel.flagX) {
+                        sound.powerup();
+                        if (currentLevelIndex < 29) {
+                            loadLevel(currentLevelIndex + 1);
+                        } else {
+                            gameState = 'WIN';
+                            alert('Congratulations! You completed all 30 levels!');
+                        }
+                    }
+                }
+
+                // 2. Render Frame
+                drawSkyGradient(); // Safe render without crashing
+
+                if (gameState === 'PLAYING') {
+                    currentLevel.draw(ctx);
+                    
+                    for (let fb of fireballs) fb.draw(ctx);
+                    for (let enemy of currentLevel.enemies) enemy.draw(ctx);
+                    
+                    player.draw(ctx);
+                }
+
+            } catch (err) {
+                // Prevent silent continuous blue screen loop
+                console.error("Game Loop Exception Caught:", err);
+                showErrorOverlay("Rendering error caught: " + err.message);
+            }
+
+            requestAnimationFrame(gameLoop);
+        }
+
+        function shootFireball() {
+            if (player.hasFire && fireballs.length < 3) {
+                fireballs.push(new Fireball(player.x + (player.facing === 'right' ? 20 : -5), player.y + 10, player.facing));
+                sound.fireball();
+            }
+        }
+
+        window.addEventListener('keydown', (e) => {
+            if (e.code === 'KeyA' || e.code === 'ArrowLeft') keys.left = true;
+            if (e.code === 'KeyD' || e.code === 'ArrowRight') keys.right = true;
+            if (e.code === 'KeyW' || e.code === 'ArrowUp' || e.code === 'Space') {
+                if (!keys.jump) keys.jumpPressed = true;
+                keys.jump = true;
+            }
+            if (e.code === 'KeyF') shootFireball();
+        });
+
+        window.addEventListener('keyup', (e) => {
+            if (e.code === 'KeyA' || e.code === 'ArrowLeft') keys.left = false;
+            if (e.code === 'KeyD' || e.code === 'ArrowRight') keys.right = false;
+            if (e.code === 'KeyW' || e.code === 'ArrowUp' || e.code === 'Space') keys.jump = false;
+        });
+
+        // Touch Control Helpers
+        function bindTouchBtn(id, onPress, onRelease) {
+            const btn = document.getElementById(id);
+            if (!btn) return;
+
+            const start = (e) => { e.preventDefault(); btn.classList.add('active'); onPress(); };
+            const end = (e) => { e.preventDefault(); btn.classList.remove('active'); onRelease(); };
+
+            btn.addEventListener('touchstart', start);
+            btn.addEventListener('touchend', end);
+            btn.addEventListener('mousedown', start);
+            btn.addEventListener('mouseup', end);
+        }
+
+        bindTouchBtn('btn-left', () => keys.left = true, () => keys.left = false);
+        bindTouchBtn('btn-right', () => keys.right = true, () => keys.right = false);
+        bindTouchBtn('btn-jump', () => { keys.jumpPressed = true; keys.jump = true; }, () => keys.jump = false);
+        bindTouchBtn('btn-fire', () => shootFireball(), () => {});
+
+        // Setup Level Select Grid
+        function populateLevelGrid() {
+            const grid = document.getElementById('level-grid');
+            grid.innerHTML = '';
+            for (let i = 0; i < 30; i++) {
+                const btn = document.createElement('button');
+                const isBoss = (i + 1) % 10 === 0;
+                btn.className = `p-3 rounded-lg font-bold text-center border transition ${
+                    isBoss ? 'bg-red-900/60 border-red-500 text-amber-300' : 'bg-slate-800 border-slate-700 hover:bg-slate-700'
+                }`;
+                btn.innerHTML = `${i + 1}${isBoss ? ' <i class="fa-solid fa-crown text-xs"></i>' : ''}`;
+                btn.onclick = () => {
+                    loadLevel(i);
+                    gameState = 'PLAYING';
+                    document.getElementById('menu-overlay').classList.add('hidden');
+                    document.getElementById('level-modal').classList.add('hidden');
+                };
+                grid.appendChild(btn);
+            }
+        }
+
+        // UI Event Listeners
+        document.getElementById('btn-start-game').onclick = () => {
+            sound.init();
+            gameState = 'PLAYING';
+            document.getElementById('menu-overlay').classList.add('hidden');
+            loadLevel(0);
+        };
+
+        document.getElementById('btn-open-levels').onclick = () => {
+            populateLevelGrid();
+            document.getElementById('level-modal').classList.remove('hidden');
+        };
+
+        document.getElementById('btn-level-select').onclick = () => {
+            populateLevelGrid();
+            document.getElementById('level-modal').classList.remove('hidden');
+        };
+
+        document.getElementById('btn-close-modal').onclick = () => {
+            document.getElementById('level-modal').classList.add('hidden');
+        };
+
+        document.getElementById('btn-sound').onclick = () => {
+            sound.enabled = !sound.enabled;
+            document.getElementById('sound-icon').className = sound.enabled ? 'fa-solid fa-volume-high mr-1.5' : 'fa-solid fa-volume-xmark mr-1.5';
+            document.getElementById('btn-sound').innerHTML = `<i class="${sound.enabled ? 'fa-solid fa-volume-high' : 'fa-solid fa-volume-xmark'} mr-1.5"></i> Sound: ${sound.enabled ? 'ON' : 'OFF'}`;
+        };
+
+        // Window Load Bootstrapper
+        window.onload = () => {
+            loadLevel(0);
+            requestAnimationFrame(gameLoop);
+        };
+    </script>
+</body>
+</html>
+```
